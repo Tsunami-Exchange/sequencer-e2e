@@ -1,0 +1,39 @@
+{
+  "scripts": {
+    "balance": "ts-node src/commands balance --",
+    "profile": "ts-node src/commands run-profile --",
+    "transfer": "ts-node src/commands transfer --",
+    "supply": "ts-node src/commands supply --",
+    "new-wallet": "ts-node src/commands new-wallet --",
+    "check-orders": "ts-node src/commands check-orders --"
+  },
+  "dependencies": {
+    "@orbs-network/ton-access": "^2.3.3",
+    "@storm-trade/sdk": "^0.7.9",
+    "@ton/core": "^0.56.3",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^14.0.0",
+    "axios": "^1.7.3",
+    "commander": "^12.1.0",
+    "lodash.chunk": "^4.2.0",
+    "p-retry": "^6.2.0",
+    "playwright": "^1.47.2",
+    "retry": "^0.13.1",
+    "ton-lite-client": "^3.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.2",
+    "@types/lodash.chunk": "^4.2.9",
+    "@types/node": "^22.7.4",
+    "@types/wtfnode": "^0.7.3",
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "prettier": "^3.3.2",
+    "wtfnode": "^0.9.3"
+  }
+}

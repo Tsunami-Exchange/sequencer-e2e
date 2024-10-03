@@ -1,0 +1,9 @@
+.idea
+node_modules
+.env
+dist
+wallets.json
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
