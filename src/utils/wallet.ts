@@ -19,6 +19,7 @@ import { LiteClient } from 'ton-lite-client';
 import * as util from 'node:util';
 import { Config } from './config';
 import { setTimeout } from 'node:timers/promises';
+import { requireBalance } from './require-balance';
 
 type ContractState = {
   active: boolean;
@@ -56,6 +57,16 @@ export class Wallet {
       const updatedAccountState = await this.client.getAccountState(address, master.last);
       state = updatedAccountState.state?.storage?.state.type;
     }
+  }
+
+  async waitForAccountStateToBeDeployed(address: Address) {
+    const master = await this.client.getMasterchainInfo();
+    const accountState = await this.client.getAccountState(address, master.last);
+    do {
+      const master = await this.client.getMasterchainInfo();
+      const updatedAccountState = await this.client.getAccountState(address, master.last);
+      accountState.state = updatedAccountState.state;
+    } while (accountState.state === null);
   }
 
   async checkContractState(address: Address): Promise<ContractState> {
@@ -104,7 +115,7 @@ export class Wallet {
   }
 
   // add timeout / time-limit
-  async waitSeqno(seqno: number, interval = 100, timeout = 25000) {
+  async waitSeqno(seqno: number, interval = 100, timeout = 40000) {
     const start = Date.now();
     let currentSeqno = seqno;
     while (currentSeqno === seqno) {
@@ -295,7 +306,12 @@ export class Wallet {
 
   async transfer(assetName: string, to: Address | string, amount: number): Promise<void> {
     const assetAmount = Config.toAsset(assetName, amount);
+    await requireBalance(this, assetName, amount, [TRANSFER_FEE]);
     return this.transferRaw(assetName, to, assetAmount);
+  }
+
+  async receive(assetName: string, from: Wallet, amount: number): Promise<void> {
+    await from.transfer(assetName, this.getTonAddress(), amount);
   }
 
   [util.inspect.custom]() {

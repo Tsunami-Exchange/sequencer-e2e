@@ -4,9 +4,9 @@ import { test } from '@fixtures/baseFixture';
 import { Direction } from '@storm-trade/sdk';
 import { beginCell, external, internal, storeMessage } from '@ton/core';
 
-test('Verify that order can be created and handled by sequencer', async ({ walletClient, sdkManager }) => {
-  const wallet = walletClient.getWallet('wallet0');
-  const market = walletClient.getMarkets('BTC/USDT');
+// We can't run in parallel because of the seqno can't transfer from the same wallet in parallel
+test('Verify that order can be created and handled by sequencer', async ({ wallet, sdkManager, config }) => {
+  const market = config.getMarket('BTC/USDT');
   const { vaultAddress, baseAsset, quoteAssetId } = market;
   const traderAddress = wallet.getTonAddress();
   const quoteAssetName = Config.assetIdToName(quoteAssetId);

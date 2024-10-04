@@ -61,6 +61,14 @@ export class ConfigContainer {
     return this.assetIdToNameMap[assetId];
   }
 
+  getMarket(marketName: string): Market {
+    const market = this.cfg.openedMarkets.find((market) => market.ticker === marketName);
+    if (!market) {
+      throw new Error(`Market ${marketName} not found`);
+    }
+    return market;
+  }
+
   toAsset(assetName: string, amount: number): bigint {
     if (assetName === 'TON') {
       return BigInt(amount * 10 ** 9);
