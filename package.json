@@ -3,6 +3,7 @@
     "prettier:fix": "prettier --write .",
     "lint:fix": "eslint . --fix"
   },
+  "type": "module",
   "dependencies": {
     "@orbs-network/ton-access": "^2.3.3",
     "@storm-trade/sdk": "^0.7.9",
@@ -13,6 +14,7 @@
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
     "graphql-request": "^7.1.0",
+    "graphql-tag": "^2.12.6",
     "lodash.chunk": "^4.2.0",
     "p-retry": "^6.2.0",
     "playwright": "^1.47.2",

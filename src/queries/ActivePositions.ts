@@ -1,5 +1,6 @@
 import { gql } from 'graphql-request';
 import { Market, Trader } from '@common/types';
+import { Address } from '@ton/core';
 
 export function ActivePositionsQuery() {
   return gql`
@@ -82,6 +83,6 @@ export function ActivePositionsQuery() {
   `;
 }
 
-export function ActivePositionsVariables(trader: Trader, marketAddress: Market['address']) {
+export function ActivePositionsVariables(trader: Trader | Address, marketAddress: Market['address']) {
   return { trader, market: marketAddress };
 }

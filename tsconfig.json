@@ -1,39 +1,37 @@
 {
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./",
-    "baseUrl": ".",
-    "checkJs": true,
+    "target": "ES2023",
     "moduleResolution": "Bundler",
-    "declaration": true,
-    "removeComments": true,
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "target": "es2022",
-    "lib": ["es2023"],
+    "module": "Preserve",
+    "noEmit": true,
+    "allowJs": true,
+    "removeComments": false,
+    "baseUrl": ".",
     "resolveJsonModule": true,
-    "sourceMap": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "strictPropertyInitialization": false,
-    "allowUnreachableCode": false,
-    "allowUnusedLabels": false,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitOverride": true,
-    "noImplicitReturns": true,
-    "noPropertyAccessFromIndexSignature": false,
-    "noUncheckedIndexedAccess": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "forceConsistentCasingInFileNames": true,
+    "lib": ["es2022"],
     "paths": {
       "@/*": ["src/*"],
-      "@fixtures/*": ["src/fixtures/*"],
+      "@tests/*": ["tests/*"],
       "@common/*": ["src/common/*"],
       "@queries/*": ["src/queries/*"],
-      "@utilities/*": ["src/utilities/*"]
-    }
+      "@utilities/*": ["src/utilities/*"],
+      "@fixtures/*": ["src/fixtures/*"]
+    },
+
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "allowImportingTsExtensions": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    "skipLibCheck": true
   }
 }

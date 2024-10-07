@@ -82,7 +82,7 @@ export const BalanceValidator = z.object({
   is_active: z.boolean().optional(),
 });
 
-const ActivePositionValidator = z.object({
+export const ActivePositionValidator = z.object({
   idx: z.string().nullable(),
   txId: z.string().nullable(),
   version: z.number(),

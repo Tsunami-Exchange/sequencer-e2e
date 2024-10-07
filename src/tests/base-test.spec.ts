@@ -1,13 +1,19 @@
+import { ActivePositionsValidator, ActivePositionValidator } from '@/common/safeTypes';
+import { ActivePositionsQuery, ActivePositionsVariables } from '@/queries/ActivePositions';
 import { Config } from '@/utils/config';
+import { GRAPHQL_URL } from '@/utils/constants';
 import { sendToSequencer } from '@/utils/sequencer';
 import { test } from '@fixtures/baseFixture';
 import { Direction } from '@storm-trade/sdk';
 import { beginCell, external, internal, storeMessage } from '@ton/core';
+import { request as gqlRequest } from 'graphql-request';
+import { expect } from 'playwright/test';
+import { z } from 'zod';
 
 // We can't run in parallel because of the seqno can't transfer from the same wallet in parallel
 test('Verify that order can be created and handled by sequencer', async ({ wallet, sdkManager, config }) => {
   const market = config.getMarket('BTC/USDT');
-  const { vaultAddress, baseAsset, quoteAssetId } = market;
+  const { vaultAddress, baseAsset, quoteAssetId, address } = market;
   const traderAddress = wallet.getTonAddress();
   const quoteAssetName = Config.assetIdToName(quoteAssetId);
   const ASSET_AMOUNT = 1;
@@ -32,4 +38,13 @@ test('Verify that order can be created and handled by sequencer', async ({ walle
     .endCell();
   await sendToSequencer(ext);
   await wallet.waitSeqno(seqno);
+  // Graphql checks are gonna be preset only for this test because the GOAL is to test database consistensy only
+  const gqlResponse: { getActivePositions: z.infer<typeof ActivePositionsValidator> } = await gqlRequest({
+    url: GRAPHQL_URL,
+    document: ActivePositionsQuery(),
+    variables: ActivePositionsVariables(traderAddress.toRawString(), address),
+  });
+  expect(ActivePositionValidator.safeParse(gqlResponse.getActivePositions.long).success).toBeTruthy();
+  expect(ActivePositionsValidator.safeParse(gqlResponse.getActivePositions).success).toBeTruthy();
+  expect(gqlResponse.getActivePositions.orders).toHaveLength(1);
 });
