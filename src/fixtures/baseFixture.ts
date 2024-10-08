@@ -5,6 +5,8 @@ import { TonLiteClient } from '../utils/lite-client';
 import { LiteClient } from 'ton-lite-client';
 import { Wallet } from '../utils/wallet';
 import { mnemonicNew } from '@ton/crypto';
+import DatabaseClient from '@/utils/db';
+import { Client } from 'pg';
 
 export const test = base.extend<{
   liteClient: LiteClient;
@@ -12,6 +14,7 @@ export const test = base.extend<{
   sdkManager: _SdkManager;
   config: ConfigContainer;
   wallet: Wallet;
+  db: DatabaseClient<Client>;
 }>({
   liteClient: async ({}, use) => {
     await use(await TonLiteClient.init());
@@ -58,12 +61,18 @@ export const test = base.extend<{
       // Probe, wait 1s, probe, wait 2s, probe, wait 10s, probe, wait 10s, probe
       // ... Defaults to [100, 250, 500, 1000].
       intervals: [1_000],
-      timeout: 15000,
+      timeout: 30000,
     });
     await use(wallet);
   },
   sdkManager: async ({ liteClient }, use) => {
     await use(await SdkManager.init(liteClient));
+  },
+
+  db: async ({}, use) => {
+    const db = new DatabaseClient();
+    await use(db);
+    await db.disconnect();
   },
 
   config: async ({}, use) => {

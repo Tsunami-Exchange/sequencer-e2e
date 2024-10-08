@@ -11,7 +11,7 @@ import { expect } from 'playwright/test';
 import { z } from 'zod';
 
 // We can't run in parallel because of the seqno can't transfer from the same wallet in parallel
-test('Verify that order can be created and handled by sequencer', async ({ wallet, sdkManager, config }) => {
+test('Verify that order can be created and handled by sequencer', async ({ wallet, sdkManager, config, db }) => {
   const market = config.getMarket('BTC/USDT');
   const { vaultAddress, baseAsset, quoteAssetId, address } = market;
   const traderAddress = wallet.getTonAddress();
@@ -38,13 +38,20 @@ test('Verify that order can be created and handled by sequencer', async ({ walle
     .endCell();
   await sendToSequencer(ext);
   await wallet.waitSeqno(seqno);
+  const traderRawString = traderAddress.toRawString();
   // Graphql checks are gonna be preset only for this test because the GOAL is to test database consistensy only
   const gqlResponse: { getActivePositions: z.infer<typeof ActivePositionsValidator> } = await gqlRequest({
     url: GRAPHQL_URL,
     document: ActivePositionsQuery(),
-    variables: ActivePositionsVariables(traderAddress.toRawString(), address),
+    variables: ActivePositionsVariables(traderRawString, address),
   });
   expect(ActivePositionValidator.safeParse(gqlResponse.getActivePositions.long).success).toBeTruthy();
   expect(ActivePositionsValidator.safeParse(gqlResponse.getActivePositions).success).toBeTruthy();
   expect(gqlResponse.getActivePositions.orders).toHaveLength(1);
+  const traderPositions = await db.getTraderPositions(traderRawString);
+  const orderHistory = await db.getOrderHistory(traderRawString);
+  const ordersV2 = await db.getOrderV2(traderRawString);
+  console.log('ordersV2', ordersV2);
+  console.log('traderPositions', traderPositions);
+  console.log('orderHistory', orderHistory);
 });
