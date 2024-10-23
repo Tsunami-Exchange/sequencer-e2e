@@ -50,6 +50,11 @@ class DatabaseClient<T extends Client> {
     return result.rows;
   }
 
+  async getTraderPositionsByTxId(hash: string) {
+    const result = await this.query<Record<string, any>>('SELECT * FROM trader_position WHERE tx_id = $1', [hash]);
+    return result.rows;
+  }
+
   async getOrderV2(trader: string) {
     const result = await this.query<Record<string, any>>('SELECT * FROM order_v2 WHERE trader = $1', [trader]);
     return result.rows;

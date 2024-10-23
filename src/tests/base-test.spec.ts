@@ -19,18 +19,27 @@ const MARKET = Config.getMarket('BTC/USDT');
 const { vaultAddress, quoteAssetId, baseAsset } = MARKET;
 const quoteAssetName = Config.assetIdToName(quoteAssetId);
 
-const orderParams = [
-  {
-    orderType: 'market' as const,
-    direction: Direction['long'],
-    leverage: BigInt(50 * 1e9),
-    amount: Config.toAsset(quoteAssetName, 1),
-    baseAsset,
-    expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
-    stopTriggerPrice: 0n,
-    takeTriggerPrice: 0n,
-    limitPrice: 0n,
-  },
+const testCases = [
+  [],
+  // stop market order
+  [
+    {
+      orderType: 'market' as const,
+      direction: Direction['long'],
+      leverage: BigInt(50 * 1e9),
+      amount: Config.toAsset(quoteAssetName, 1),
+      baseAsset,
+      expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
+      stopTriggerPrice: 0n,
+      takeTriggerPrice: 0n,
+      limitPrice: 0n,
+      stopPrice: 100n,
+    },
+    {
+      orderStatusesOrder: ['seq_pending', 'active', 'tx_sent', 'executed'],
+      orderType: 'limit',
+    },
+  ],
   // Default limit order
   {
     orderType: 'stopLimit' as const,
@@ -60,29 +69,54 @@ const orderParams = [
 ];
 
 // create separate test where market first would be opened and then separate transaction to create takeProfit position and StopLoss position in the same direction
-
-orderParams.forEach(async (params) => {
-  test(`Verify that order ${params.orderType} with ${params.stopPrice} can be created and handled by sequencer`, async ({
-    wallet,
-    sdkManager,
-    db,
-  }) => {
-    const traderAddress = wallet.getTonAddress();
-    const transaction = await sdkManager.createOrder(vaultAddress, { ...params, traderAddress });
-    const seqno = await wallet.getSeqno();
-    const transfer = await wallet.createTransfer([internal(transaction)], seqno);
-    const ext = beginCell()
-      .store(storeMessage(external({ body: transfer, to: wallet.getTonAddress() })))
-      .endCell();
-    await sendToSequencer(ext);
-    await wallet.waitSeqno(seqno);
-    const traderRawString = traderAddress.toRawString();
-    await new Promise((resolve) => setTimeout(resolve, 120 * 1000));
-    const promises = [await db.getOrderHistory(traderRawString), await db.getOrderV2(traderRawString), await db.getTraderPositions(traderRawString)];
-    const [orderHistory, ordersV2, traderPositions] = await Promise.all(promises);
-    console.log('trader address', traderRawString);
-    console.log('orders', orderHistory);
-    console.log('ordersV2', ordersV2);
-    console.log('traderPositions', traderPositions);
-  });
+test(`Verify that order open market order can be created`, async ({ wallet, sdkManager, db }) => {
+  const traderAddress = wallet.getTonAddress();
+  const orderParams = {
+    orderType: 'market' as const,
+    direction: Direction['long'],
+    leverage: BigInt(50 * 1e9),
+    amount: Config.toAsset(quoteAssetName, 1),
+    baseAsset,
+    expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
+    stopTriggerPrice: 0n,
+    takeTriggerPrice: 0n,
+    limitPrice: 0n,
+  };
+  const transaction = await sdkManager.createOrder(vaultAddress, { ...orderParams, traderAddress });
+  const seqno = await wallet.getSeqno();
+  const transfer = await wallet.createTransfer([internal(transaction)], seqno);
+  const ext = beginCell()
+    .store(storeMessage(external({ body: transfer, to: wallet.getTonAddress() })))
+    .endCell();
+  await sendToSequencer(ext);
+  await wallet.waitSeqno(seqno);
+  const traderRawString = traderAddress.toRawString();
+  const orderStatuses = ['seq_pending', 'active', 'executed'];
+  const orderType = 'market';
+  let actualOrderStatuses;
+  let orderTypesSet;
+  let orderHistory;
+  // check order statuses in order history after 5 min interval (pending to executed (all statuses) )
+  while (Date.now() < 5 * 60 * 1000) {
+    await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
+    orderHistory = await db.getOrderHistory(traderRawString);
+    actualOrderStatuses = orderHistory.map(({ status }) => status);
+    orderTypesSet = new Set(orderHistory.map(({ type }) => type));
+    if (actualOrderStatuses.every((status) => orderStatuses.includes(status))) {
+      break;
+    }
+  }
+  expect(actualOrderStatuses).toEqual(orderStatuses);
+  expect(orderTypesSet).toEqual(new Set([orderType]));
+  const [traderPosition] = await db.getTraderPositions(traderRawString);
+  expect(traderPosition.status).toEqual('opened');
+  const PRICE_IMPACT_COEFFICIENT = 0.02;
+  const lowerBoundary = traderPosition.index_price - (traderPosition.exchange_qoute / traderPosition.exchange_base) * PRICE_IMPACT_COEFFICIENT; //
+  const upperBoundary = traderPosition.index_price + (traderPosition.exchange_qoute / traderPosition.exchange_base) * PRICE_IMPACT_COEFFICIENT; //
+  expect(Number(traderPosition.index_price)).toBeGreaterThanOrEqual(lowerBoundary);
+  expect(Number(traderPosition.index_price)).toBeLessThanOrEqual(upperBoundary.5);
+  /* trader position / order v2 table in db (checking index price + exchange_qoute / exchange_base compare it to index_price)
+    with price impact coefficient derivation (0.02% for example) */
+  console.log('trader address', traderRawString);
+  console.log('orders', orderHistory);
 });
