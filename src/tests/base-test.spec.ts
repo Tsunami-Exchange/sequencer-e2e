@@ -67,7 +67,7 @@ test(`Verify that order open market order can be created`, async ({ wallet, sdkM
   await sendToSequencer(ext);
   await wallet.waitSeqno(seqno);
   const traderRawString = traderAddress.toRawString();
-  const orderStatuses = ['seq_pending', 'active', 'executed'];
+  const orderStatuses = ['seq_pending', 'active', 'tx_sent', 'executed'];
   const orderType = 'market';
   let actualOrderStatuses;
   let orderTypesSet;
@@ -79,10 +79,11 @@ test(`Verify that order open market order can be created`, async ({ wallet, sdkM
     orderHistory = await db.getOrderHistory(traderRawString);
     actualOrderStatuses = orderHistory.map(({ status }) => status);
     orderTypesSet = new Set(orderHistory.map(({ type }) => type));
-    if (actualOrderStatuses.length === orderStatuses.length && actualOrderStatuses.every((value, index) => value === orderStatuses[index])) {
+    if (actualOrderStatuses.every((value, index) => value === orderStatuses[index])) {
       break;
     }
   }
+  // check that event_created of active orderType and executed not more than 1 min (soft assertion)
   expect(actualOrderStatuses).toEqual(orderStatuses);
   expect(orderTypesSet).toEqual(new Set([orderType]));
   const [traderPosition] = await db.getTraderPositions(traderRawString);
@@ -126,7 +127,7 @@ test(`Verify that stop market order can be created and activated via fake oracle
   await sendToSequencer(ext);
   await wallet.waitSeqno(seqno);
   const traderRawString = traderAddress.toRawString();
-  const orderStatuses = ['seq_pending', 'active', 'tx_sent', 'executed'];
+  let orderStatuses = ['seq_pending', 'active', 'tx_sent'];
   const orderType = 'limit';
   let actualOrderStatuses;
   let orderTypesSet;
@@ -144,23 +145,25 @@ test(`Verify that stop market order can be created and activated via fake oracle
   }
   expect(actualOrderStatuses).toEqual(orderStatuses);
   expect(orderTypesSet).toEqual(new Set([orderType]));
+  orderStatuses = ['seq_pending', 'active', 'tx_sent', 'executed'];
   await setTriggerPriceCommand(baseAsset, 1.1);
   while (Date.now() < endTime) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     orderHistory = await db.getOrderHistory(traderRawString);
     actualOrderStatuses = orderHistory.map(({ status }) => status);
     orderTypesSet = new Set(orderHistory.map(({ type }) => type));
-    if (actualOrderStatuses.length === orderStatuses.length && actualOrderStatuses.every((value, index) => value === orderStatuses[index])) {
+    if (actualOrderStatuses.every((value, index) => value === orderStatuses[index])) {
       break;
     }
   }
   const [traderPosition] = await db.getTraderPositions(traderRawString);
   expect(traderPosition.status).toEqual('opened');
-  const PRICE_IMPACT_COEFFICIENT = 0.02;
-  const lowerBoundary = traderPosition.index_price - (traderPosition.exchange_qoute / traderPosition.exchange_base) * PRICE_IMPACT_COEFFICIENT; //
-  const upperBoundary = traderPosition.index_price + (traderPosition.exchange_qoute / traderPosition.exchange_base) * PRICE_IMPACT_COEFFICIENT; //
-  expect(Number(traderPosition.index_price)).toBeGreaterThanOrEqual(lowerBoundary);
-  expect(Number(traderPosition.index_price)).toBeLessThanOrEqual(upperBoundary);
+  // for non default market orders we should check by trigger price instead of index price + coefficient should be very small
+  const PRICE_IMPACT_COEFFICIENT = 0.002;
+  const lowerBoundary = traderPosition.trigger_price - (traderPosition.exchange_qoute / traderPosition.exchange_base) * PRICE_IMPACT_COEFFICIENT; //
+  const upperBoundary = traderPosition.trigger_price + (traderPosition.exchange_qoute / traderPosition.exchange_base) * PRICE_IMPACT_COEFFICIENT; //
+  expect(Number(traderPosition.trigger_price)).toBeGreaterThanOrEqual(lowerBoundary);
+  expect(Number(traderPosition.trigger_price)).toBeLessThanOrEqual(upperBoundary);
   /* trader position / order v2 table in db (checking index price + exchange_qoute / exchange_base compare it to index_price)
     with price impact coefficient derivation (0.02% for example) */
   console.log('trader address', traderRawString);
