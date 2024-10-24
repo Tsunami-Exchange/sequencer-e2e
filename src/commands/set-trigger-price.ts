@@ -1,6 +1,7 @@
+import { Market } from '@/utils/config';
 import { ORACLE_URL } from '../utils/constants';
 
-export const setTriggerPriceCommand = async (asset: string, price: number) => {
+export const setTriggerPriceCommand = async (asset: Market['baseAsset'], price: number) => {
   const response = await fetch(`${ORACLE_URL}/oracle-adapter/fake/price`, {
     method: 'PUT',
     headers: {
