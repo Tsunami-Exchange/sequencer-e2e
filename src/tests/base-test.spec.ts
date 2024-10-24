@@ -96,13 +96,14 @@ test(`Verify that order open market order can be created`, async ({ wallet, sdkM
   let actualOrderStatuses;
   let orderTypesSet;
   let orderHistory;
+  const endTime = Date.now() + 5 * 60 * 1000;
   // check order statuses in order history after 5 min interval (pending to executed (all statuses) )
-  while (Date.now() < 5 * 60 * 1000) {
-    await new Promise((resolve) => setTimeout(resolve, 60 * 1000));
+  while (Date.now() < endTime) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     orderHistory = await db.getOrderHistory(traderRawString);
     actualOrderStatuses = orderHistory.map(({ status }) => status);
     orderTypesSet = new Set(orderHistory.map(({ type }) => type));
-    if (actualOrderStatuses.every((status) => orderStatuses.includes(status))) {
+    if (actualOrderStatuses.length === orderStatuses.length && actualOrderStatuses.every((value, index) => value === orderStatuses[index])) {
       break;
     }
   }
@@ -114,7 +115,7 @@ test(`Verify that order open market order can be created`, async ({ wallet, sdkM
   const lowerBoundary = traderPosition.index_price - (traderPosition.exchange_qoute / traderPosition.exchange_base) * PRICE_IMPACT_COEFFICIENT; //
   const upperBoundary = traderPosition.index_price + (traderPosition.exchange_qoute / traderPosition.exchange_base) * PRICE_IMPACT_COEFFICIENT; //
   expect(Number(traderPosition.index_price)).toBeGreaterThanOrEqual(lowerBoundary);
-  expect(Number(traderPosition.index_price)).toBeLessThanOrEqual(upperBoundary.5);
+  expect(Number(traderPosition.index_price)).toBeLessThanOrEqual(upperBoundary);
   /* trader position / order v2 table in db (checking index price + exchange_qoute / exchange_base compare it to index_price)
     with price impact coefficient derivation (0.02% for example) */
   console.log('trader address', traderRawString);
