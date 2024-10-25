@@ -25,9 +25,8 @@ async function getOrderHistoryLoop(
   while (Date.now() < endTime) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     orderHistory = await db.getOrderHistory(traderRawString);
-    const allTxSentRecords = orderHistory.filter(({ status }) => status === 'tx_sent');
-    if (allTxSentRecords.length > 1) {
-      const [firstTxSentRecord] = allTxSentRecords;
+    while (orderHistory.filter(({ status }) => status === 'tx_sent').length > 1) {
+      const firstTxSentRecord = orderHistory.find(({ status }) => status === 'tx_sent');
       const index = orderHistory.indexOf(firstTxSentRecord);
       orderHistory.splice(index, 1);
     }
