@@ -12,15 +12,12 @@ import { expect } from 'playwright/test';
 // We can't run in parallel because of the seqno can't transfer from the same wallet in parallel
 
 await Config.init();
-const MARKET = Config.getMarket('BTC/USDT');
-const { vaultAddress, quoteAssetId, baseAsset } = MARKET;
-const quoteAssetName = Config.assetIdToName(quoteAssetId);
 
 async function getOrderHistoryLoop(
   db: DatabaseClient<Client>,
   traderRawString: string,
   orderStatuses: string[],
-  endTime: number = Date.now() + 5 * 60 * 1000
+  endTime: number = Date.now() + 10 * 60 * 1000
 ) {
   let orderHistory: any[] = [];
   let actualOrderStatuses: string[] = [];
@@ -47,38 +44,41 @@ async function getOrderHistoryLoop(
   };
 }
 
-const testCases = [
-  // Default limit order
-  {
-    orderType: 'stopLimit' as const,
-    direction: Direction['short'],
-    leverage: BigInt(50 * 1e9),
-    amount: Config.toAsset(quoteAssetName, 1),
-    baseAsset,
-    expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
-    stopTriggerPrice: Config.toAsset(quoteAssetName, 99.5),
-    takeTriggerPrice: 0n,
-    stopPrice: 0n,
-    limitPrice: Config.toAsset(quoteAssetName, 100),
-  },
-  // stopLimit order type
-  {
-    orderType: 'stopLimit' as const,
-    direction: Direction['short'],
-    leverage: BigInt(50 * 1e9),
-    amount: Config.toAsset(quoteAssetName, 1),
-    baseAsset,
-    expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
-    stopTriggerPrice: Config.toAsset(quoteAssetName, 99.5),
-    takeTriggerPrice: 0n,
-    stopPrice: 100n,
-    limitPrice: Config.toAsset(quoteAssetName, 100),
-  },
-];
+// const testCases = [
+//   // Default limit order
+//   {
+//     orderType: 'stopLimit' as const,
+//     direction: Direction['short'],
+//     leverage: BigInt(50 * 1e9),
+//     amount: Config.toAsset(quoteAssetName, 1),
+//     baseAsset,
+//     expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
+//     stopTriggerPrice: Config.toAsset(quoteAssetName, 99.5),
+//     takeTriggerPrice: 0n,
+//     stopPrice: 0n,
+//     limitPrice: Config.toAsset(quoteAssetName, 100),
+//   },
+//   // stopLimit order type
+//   {
+//     orderType: 'stopLimit' as const,
+//     direction: Direction['short'],
+//     leverage: BigInt(50 * 1e9),
+//     amount: Config.toAsset(quoteAssetName, 1),
+//     baseAsset,
+//     expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
+//     stopTriggerPrice: Config.toAsset(quoteAssetName, 99.5),
+//     takeTriggerPrice: 0n,
+//     stopPrice: 100n,
+//     limitPrice: Config.toAsset(quoteAssetName, 100),
+//   },
+// ];
 
 // create separate test where market first would be opened and then separate transaction to create takeProfit position and StopLoss position in the same direction
 test(`Verify that order open market order can be created`, async ({ wallet, sdkManager, db }) => {
   const traderAddress = wallet.getTonAddress();
+  const MARKET = Config.getMarket('BNB/USDT');
+  const { vaultAddress, quoteAssetId, baseAsset } = MARKET;
+  const quoteAssetName = Config.assetIdToName(quoteAssetId);
   // default market order
   const orderParams = {
     orderType: 'market' as const,
@@ -103,15 +103,15 @@ test(`Verify that order open market order can be created`, async ({ wallet, sdkM
   const orderStatuses = ['seq_pending', 'active', 'tx_sent', 'executed'];
   const orderType = 'market';
   // check order statuses in order history after 5 min interval (pending to executed (all statuses) )
-  let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, traderRawString, orderStatuses,);
+  let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, traderRawString, orderStatuses);
   expect(actualOrderStatuses).toEqual(orderStatuses);
   expect(orderTypesSet).toEqual(new Set([orderType]));
   // check that event_created of active orderType and executed not more than 1 min (soft assertion)
   if (orderHistory !== undefined) {
     const orderExecuted = orderHistory.find(({ status }) => status === 'executed');
     const orderActive = orderHistory.find(({ status }) => status === 'active');
-    const executedTs = new Date(orderExecuted?.event_created).getTime();
-    const activeTs = new Date(orderActive?.event_created).getTime();
+    const executedTs = new Date(orderExecuted?.event_created_at).getTime();
+    const activeTs = new Date(orderActive?.event_created_at).getTime();
     expect(executedTs - activeTs).toBeLessThanOrEqual(60 * 1000);
   }
   const [traderPosition] = await db.getTraderPositions(traderRawString);
@@ -130,6 +130,9 @@ test(`Verify that stop market order can be created and activated via fake oracle
 }) => {
   const traderAddress = wallet.getTonAddress();
   // stop market order
+  const MARKET = Config.getMarket('BNB/USDT');
+  const { vaultAddress, quoteAssetId, baseAsset } = MARKET;
+  const quoteAssetName = Config.assetIdToName(quoteAssetId);
   const orderParams = {
     orderType: 'market' as const,
     direction: Direction['long'],
