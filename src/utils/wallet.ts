@@ -115,7 +115,7 @@ export class Wallet {
   }
 
   // add timeout / time-limit
-  async waitSeqno(seqno: number, interval = 100, timeout = 40000) {
+  async waitSeqno(seqno: number, interval = 100, timeout = 80000) {
     const start = Date.now();
     let currentSeqno = seqno;
     while (currentSeqno === seqno) {

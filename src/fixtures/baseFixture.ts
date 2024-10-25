@@ -61,7 +61,7 @@ export const test = base.extend<{
       // Probe, wait 1s, probe, wait 2s, probe, wait 10s, probe, wait 10s, probe
       // ... Defaults to [100, 250, 500, 1000].
       intervals: [1_000],
-      timeout: 30000,
+      timeout: 300000,
     });
     await use(wallet);
   },
