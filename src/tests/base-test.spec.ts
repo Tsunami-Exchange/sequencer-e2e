@@ -102,34 +102,35 @@ const checkOrderExecutionTime = (orderExecuted: any, orderActive: any, execution
 const EXECUTED_ORDER_STATUSES = ['seq_pending', 'active', 'tx_sent', 'executed'];
 const ACTIVE_ORDER_STATUSES = ['seq_pending', 'active'];
 
-
-test(`Verify that order open market order can be created`, async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
-  const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
-  const quoteAssetName = Config.assetIdToName(quoteAssetId);
-  const AMOUNT_OF_USDT = 1;
-  // default market order
-  const orderType = 'market' as const;
-  const orderParams = {
-    orderType,
-    direction: Direction['long'],
-    leverage: BigInt(50 * 1e9),
-    amount: Config.toAsset(quoteAssetName, AMOUNT_OF_USDT),
-    baseAsset,
-    expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
-    stopTriggerPrice: 0n,
-    takeTriggerPrice: 0n,
-    limitPrice: 0n,
-    traderAddress: tonAddress,
-  };
-  await createOrder(sdkManager, vaultAddress, orderParams, wallet);
-  let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, tonAddressRaw, EXECUTED_ORDER_STATUSES);
-  checkOrderStatuses(actualOrderStatuses, EXECUTED_ORDER_STATUSES);
-  checkOrderType(orderTypesSet, orderType);
-  const orderExecuted = findOrderByStatus(orderHistory, 'executed');
-  const orderActive = findOrderByStatus(orderHistory, 'active');
-  checkOrderExecutionTime(orderExecuted, orderActive);
-  const [traderPosition] = await db.getTraderPositions(tonAddressRaw);
-  checkIndexPriceAndPositionStatus(traderPosition);
+['BTC/USDT', 'ETH/USDT', 'BNB/USDT'].forEach((market) => {
+  test(`Verify that order open market order can be created in ${market}`, async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
+    const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket(market);
+    const quoteAssetName = Config.assetIdToName(quoteAssetId);
+    const AMOUNT_OF_USDT = 1;
+    // default market order
+    const orderType = 'market' as const;
+    const orderParams = {
+      orderType,
+      direction: Direction['long'],
+      leverage: BigInt(50 * 1e9),
+      amount: Config.toAsset(quoteAssetName, AMOUNT_OF_USDT),
+      baseAsset,
+      expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
+      stopTriggerPrice: 0n,
+      takeTriggerPrice: 0n,
+      limitPrice: 0n,
+      traderAddress: tonAddress,
+    };
+    await createOrder(sdkManager, vaultAddress, orderParams, wallet);
+    let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, tonAddressRaw, EXECUTED_ORDER_STATUSES);
+    checkOrderStatuses(actualOrderStatuses, EXECUTED_ORDER_STATUSES);
+    checkOrderType(orderTypesSet, orderType);
+    const orderExecuted = findOrderByStatus(orderHistory, 'executed');
+    const orderActive = findOrderByStatus(orderHistory, 'active');
+    checkOrderExecutionTime(orderExecuted, orderActive);
+    const [traderPosition] = await db.getTraderPositions(tonAddressRaw);
+    checkIndexPriceAndPositionStatus(traderPosition);
+  });
 });
 
 test(`Verify that stop market order can be created and activated via index price == stop price`, async ({
