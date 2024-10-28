@@ -142,7 +142,7 @@ test(`Verify that stop market order can be created and activated via index price
 }) => {
   const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
   const quoteAssetName = Config.assetIdToName(quoteAssetId);
-  const stopPrice = BigInt(1.1 * 1e9);
+  const stopPrice = BigInt(101 * 1e9);
   const orderParams = {
     orderType: 'stopLimit' as const,
     direction: Direction['long'],
