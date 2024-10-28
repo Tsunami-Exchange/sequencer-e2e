@@ -185,16 +185,10 @@ export class Wallet {
   }
 
   async getTonBalance(): Promise<bigint> {
-    if (!this.tonContractState.deployed) {
-      return 0n;
-    }
     return this.tonContract.getBalance();
   }
 
   async getJettonBalance(name: string): Promise<bigint> {
-    if (!this.jettonContractStates[name]?.deployed) {
-      return 0n;
-    }
     const contract = this.getJettonContract(name);
     return contract.getBalance();
   }

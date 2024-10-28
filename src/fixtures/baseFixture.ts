@@ -44,11 +44,9 @@ export const test = base.extend<{
     for (const asset of defaultAssets) await treasury.transfer(asset, newWalletAddress, 1);
     await wallet.waitForAccountStateToBeDeployed(newWalletAddress);
     await wallet.init();
-    await Promise.all(
-      assets.map(async (asset) => {
-        await wallet.addJetton(asset.name, asset.assetId);
-      })
-    );
+    assets.map(async (asset) => {
+      await wallet.addJetton(asset.name, asset.assetId);
+    });
     await expect(async () => {
       const [tonBalance, ...balances] = await Promise.all(
         defaultAssets.map(async (asset) => {

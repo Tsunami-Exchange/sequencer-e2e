@@ -20,7 +20,7 @@ class _TonLiteClient {
     }
     const tonConfigResponse = await fetch('https://ton.org/testnet-global.config.json');
     const tonConfig: any = await tonConfigResponse.json();
-    this.engines = tonConfig.liteservers.slice(0, 1).map(
+    this.engines = tonConfig.liteservers.slice(1, 2).map(
       (ls: any) =>
         new LiteSingleEngine({
           host: `tcp://${intToIP(ls.ip)}:${ls.port}`,
