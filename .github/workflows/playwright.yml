@@ -11,6 +11,9 @@ jobs:
     name: Test
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    env: 
+      TREASURY_SEED: ${{ secrets.TREASURY_SEED }}
+      DB_PASSWORD : ${{ secrets.DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
