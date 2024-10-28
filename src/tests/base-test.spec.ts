@@ -30,7 +30,7 @@ async function getOrderHistoryLoop(
   db: DatabaseClient<Client>,
   traderRawString: string,
   orderStatuses: string[],
-  endTime: number = Date.now() + 10 * 60 * 1000
+  endTime: number = Date.now() + 5 * 60 * 1000
 ) {
   let orderHistory: any[] = [];
   let actualOrderStatuses: string[] = [];
@@ -156,6 +156,7 @@ test(`Verify that stop market order can be created and activated via index price
     stopPrice,
     traderAddress: tonAddress,
   };
+  await setTriggerPriceCommand(baseAsset, 100);
   await createOrder(sdkManager, vaultAddress, orderParams, wallet);
   const orderType = 'limit';
   let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, tonAddressRaw, ACTIVE_ORDER_STATUSES);

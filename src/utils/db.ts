@@ -61,7 +61,7 @@ class DatabaseClient<T extends Client> {
   }
 
   async getOrderHistory(trader: string) {
-    const result = await this.query<Record<string, any>>('SELECT * FROM order_history WHERE trader = $1', [trader]);
+    const result = await this.query<Record<string, any>>('SELECT * FROM order_history WHERE trader = $1 ORDER BY event_created_at asc', [trader]);
     return result.rows;
   }
 
