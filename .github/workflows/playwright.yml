@@ -57,6 +57,7 @@ jobs:
         # commit report, then try push-rebase-loop until it's able to merge the HTML report to the gh-pages branch
         # this is necessary when this job running at least twice at the same time (e.g. through two pushes at the same time)
         run: |
+          mv -f $HTML_REPORT_URL_PATH/{*,.*} .
           git add .
           git commit -m "workflow: add HTML report for run-id ${{ github.run_id }} (attempt:  ${{ github.run_attempt }})"
 
