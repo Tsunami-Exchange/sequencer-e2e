@@ -102,6 +102,7 @@ const checkOrderExecutionTime = (orderExecuted: any, orderActive: any, execution
 const EXECUTED_ORDER_STATUSES = ['seq_pending', 'active', 'tx_sent', 'executed'];
 const ACTIVE_ORDER_STATUSES = ['seq_pending', 'active'];
 
+test.skip(true === true, 'Temporary skipping all tests to check gh pages');
 ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'].forEach((market) => {
   test(`Verify that order open market order can be created in ${market}`, async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
     const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket(market);
