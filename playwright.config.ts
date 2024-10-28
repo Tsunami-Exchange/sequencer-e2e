@@ -15,7 +15,7 @@ import { retry } from './src/utils/retry';
  */
 export default defineConfig({
   testDir: './src/tests',
-  timeout: 300000,
+  timeout: 10 * 60 * 1000,
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

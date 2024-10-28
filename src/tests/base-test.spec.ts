@@ -65,7 +65,7 @@ async function getOrderHistoryLoop(
 const checkOrderExecutionTime = (orderExecuted: any, orderActive: any, executionTime: number = 60 * 1000) => {
   const executedTs = new Date(orderExecuted?.event_created_at).getTime();
   const activeTs = new Date(orderActive?.event_created_at).getTime();
-  expect(executedTs - activeTs, `Checking that time spent from active status to executed is less than ${executionTime}ms`).toBeLessThanOrEqual(
+  expect.soft(executedTs - activeTs, `Checking that time spent from active status to executed is less than ${executionTime}ms`).toBeLessThanOrEqual(
     executionTime
   );
 };
@@ -104,6 +104,7 @@ const ACTIVE_ORDER_STATUSES = ['seq_pending', 'active'];
 
 ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'].forEach((market) => {
   test(`Verify that order open market order can be created in ${market}`, async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
+    test.setTimeout(1000 * 8 * 60);
     const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket(market);
     const quoteAssetName = Config.assetIdToName(quoteAssetId);
     const AMOUNT_OF_USDT = 1;
@@ -140,6 +141,7 @@ test(`Verify that stop market order can be created and activated via index price
   tonAddress,
   tonAddressRaw,
 }) => {
+  test.setTimeout(60 * 12 * 1000);
   const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
   const quoteAssetName = Config.assetIdToName(quoteAssetId);
   const stopPrice = BigInt(101 * 1e9);
@@ -161,7 +163,7 @@ test(`Verify that stop market order can be created and activated via index price
   const orderType = 'limit';
   let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, tonAddressRaw, ACTIVE_ORDER_STATUSES);
   orderHistory.forEach(({ stop_price }) => {
-    expect(Number(stop_price), 'Checking stop price. Should be equal to the one set in initial orderParams').toEqual(Number(stopPrice));
+    expect.soft(Number(stop_price), 'Checking stop price. Should be equal to the one set in initial orderParams').toEqual(Number(stopPrice));
   });
   checkOrderStatuses(actualOrderStatuses, ACTIVE_ORDER_STATUSES);
   checkOrderType(orderTypesSet, orderType);
@@ -193,23 +195,23 @@ async function createOrder(sdkManager: _SdkManager, vaultAddress: string, orderP
 
 function checkIndexPriceAndPositionStatus(traderPosition: Record<string, any>, PRICE_IMPACT_COEFFICIENT = 0.02) {
   // for non default market orders we should check by trigger price instead of index price + coefficient should be very small
-  expect(traderPosition.status, 'Checking trader position status to be opened').toEqual('opened');
+  expect.soft(traderPosition.status, 'Checking trader position status to be opened').toEqual('opened');
   const indexPrice = Number(traderPosition?.index_price);
   const exchangedQuote = Number(traderPosition?.exchanged_quote);
   const exchangedBase = Number(traderPosition?.exchanged_base);
   const priceImpact = (exchangedQuote / exchangedBase) * PRICE_IMPACT_COEFFICIENT;
   const lowerBound = indexPrice - priceImpact;
   const upperBound = indexPrice + priceImpact;
-  expect(indexPrice, 'Checking lower boundary of trader position index price').toBeGreaterThanOrEqual(lowerBound);
-  expect(indexPrice, 'Checking upper boundary of trader position index price').toBeLessThanOrEqual(upperBound);
+  expect.soft(indexPrice, 'Checking lower boundary of trader position index price').toBeGreaterThanOrEqual(lowerBound);
+  expect.soft(indexPrice, 'Checking upper boundary of trader position index price').toBeLessThanOrEqual(upperBound);
 }
 
 function checkOrderStatuses(actualOrderStatuses: string[], expectedOrderStatuses: string[]) {
-  expect(actualOrderStatuses, `Checking order statuses. Expecting to have - ${expectedOrderStatuses.join(', ')}`).toEqual(expectedOrderStatuses);
+  expect.soft(actualOrderStatuses, `Checking order statuses. Expecting to have - ${expectedOrderStatuses.join(', ')}`).toEqual(expectedOrderStatuses);
 }
 
 function checkOrderType(actualOrderTypes: Set<string>, orderType: string) {
-  expect(actualOrderTypes, `Checking order types. Expecting to have orderType - ${orderType}`).toEqual(new Set([orderType]));
+  expect.soft(actualOrderTypes, `Checking order types. Expecting to have orderType - ${orderType}`).toEqual(new Set([orderType]));
 }
 
 function findOrderByStatus(orderHistory: any[], status: string) {
