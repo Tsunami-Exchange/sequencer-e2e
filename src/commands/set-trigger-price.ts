@@ -1,8 +1,8 @@
 import { Market } from '@/utils/config';
-import { ORACLE_URL } from '../utils/constants';
+import { FAKE_ORCALE_API_URL } from '../utils/constants';
 
 export const setTriggerPriceCommand = async (asset: Market['baseAsset'], price: number) => {
-  const response = await fetch(`${ORACLE_URL}/oracle-adapter/fake/price`, {
+  const response = await fetch(`${FAKE_ORCALE_API_URL}/price`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

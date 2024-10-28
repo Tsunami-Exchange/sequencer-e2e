@@ -7,6 +7,7 @@ import { Wallet } from '../utils/wallet';
 import { mnemonicNew } from '@ton/crypto';
 import DatabaseClient from '@/utils/db';
 import { Client } from 'pg';
+import { Address } from '@ton/core';
 
 export const test = base.extend<{
   liteClient: LiteClient;
@@ -15,6 +16,8 @@ export const test = base.extend<{
   config: ConfigContainer;
   wallet: Wallet;
   db: DatabaseClient<Client>;
+  tonAddress: Address;
+  tonAddressRaw: string;
 }>({
   liteClient: async ({}, use) => {
     await use(await TonLiteClient.init());
@@ -63,6 +66,14 @@ export const test = base.extend<{
     });
     await use(wallet);
   },
+  tonAddress: async ({ wallet }, use) => {
+    const tonAddress = wallet.getTonAddress();
+    await use(tonAddress);
+  },
+  tonAddressRaw: async ({ tonAddress }, use) => {
+    const tonAddressRaw = tonAddress.toRawString();
+    await use(tonAddressRaw);
+  },
   sdkManager: async ({ liteClient }, use) => {
     await use(await SdkManager.init(liteClient));
   },
@@ -77,18 +88,3 @@ export const test = base.extend<{
     await use(await Config.init());
   },
 });
-
-// import { retry } from '../utils/retry';
-// import { sendToSequencer } from '../utils/sequencer';
-// test('create order', async () => {
-//   const seqno = await w.getSeqno();
-//   const transfer = await w.createTransfer([internal(tx)], seqno);
-//   const ext = beginCell()
-//     .store(storeMessage(external({ body: transfer, to: w.getTonAddress() })))
-//     .endCell();
-//   await retry(() => sendToSequencer(ext), {
-//     shouldRetry: (error) => (error ? error.message.includes('exitcode=33') || error.message.includes('fetch failed') : false),
-//     maxRetries: 5,
-//   });
-//   await w.waitSeqno(seqno);
-// });
