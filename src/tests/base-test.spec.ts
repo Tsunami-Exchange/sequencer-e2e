@@ -5,7 +5,7 @@ import { _SdkManager } from '@/utils/sdk-manager';
 import { sendToSequencer } from '@/utils/sequencer';
 import { Wallet } from '@/utils/wallet';
 import { test } from '@fixtures/baseFixture';
-import { AsyncCreateOrderParams, Direction } from '@storm-trade/sdk';
+import { AsyncClosePositionParams, AsyncCreateOrderParams, Direction, TXParams } from '@storm-trade/sdk';
 import { beginCell, external, internal, storeMessage } from '@ton/core';
 import { Client } from 'pg';
 import { expect } from 'playwright/test';
@@ -65,9 +65,9 @@ async function getOrderHistoryLoop(
 const checkOrderExecutionTime = (orderExecuted: any, orderActive: any, executionTime: number = 60 * 1000) => {
   const executedTs = new Date(orderExecuted?.event_created_at).getTime();
   const activeTs = new Date(orderActive?.event_created_at).getTime();
-  expect.soft(executedTs - activeTs, `Checking that time spent from active status to executed is less than ${executionTime}ms`).toBeLessThanOrEqual(
-    executionTime
-  );
+  expect
+    .soft(executedTs - activeTs, `Checking that time spent from active status to executed is less than ${executionTime}ms`)
+    .toBeLessThanOrEqual(executionTime);
 };
 
 // const testCases = [
@@ -108,13 +108,14 @@ const ACTIVE_ORDER_STATUSES = ['seq_pending', 'active'];
     const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket(market);
     const quoteAssetName = Config.assetIdToName(quoteAssetId);
     const AMOUNT_OF_USDT = 1;
+    const AMOUNT_IN_ASSET = Config.toAsset(quoteAssetName, AMOUNT_OF_USDT);
     // default market order
     const orderType = 'market' as const;
     const orderParams = {
       orderType,
       direction: Direction['long'],
       leverage: BigInt(50 * 1e9),
-      amount: Config.toAsset(quoteAssetName, AMOUNT_OF_USDT),
+      amount: AMOUNT_IN_ASSET,
       baseAsset,
       expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
       stopTriggerPrice: 0n,
@@ -131,6 +132,12 @@ const ACTIVE_ORDER_STATUSES = ['seq_pending', 'active'];
     checkOrderExecutionTime(orderExecuted, orderActive);
     const [traderPosition] = await db.getTraderPositions(tonAddressRaw);
     checkIndexPriceAndPositionStatus(traderPosition);
+    await closePosition(
+      sdkManager,
+      vaultAddress,
+      { traderAddress: tonAddress, baseAsset, direction: Direction['long'], size: AMOUNT_IN_ASSET },
+      wallet
+    );
   });
 });
 
@@ -144,12 +151,14 @@ test(`Verify that stop market order can be created and activated via index price
   test.setTimeout(60 * 12 * 1000);
   const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
   const quoteAssetName = Config.assetIdToName(quoteAssetId);
+  const AMOUNT_OF_USDT = 1;
+  const AMOUNT_IN_ASSET = Config.toAsset(quoteAssetName, AMOUNT_OF_USDT);
   const stopPrice = BigInt(101 * 1e9);
   const orderParams = {
     orderType: 'stopLimit' as const,
     direction: Direction['long'],
     leverage: BigInt(50 * 1e9),
-    amount: Config.toAsset(quoteAssetName, 1),
+    amount: AMOUNT_IN_ASSET,
     baseAsset,
     expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
     stopTriggerPrice: 0n,
@@ -180,10 +189,25 @@ test(`Verify that stop market order can be created and activated via index price
   checkOrderType(secondOrderTypesSet, orderType);
   const [traderPosition] = await db.getTraderPositions(tonAddressRaw);
   checkIndexPriceAndPositionStatus(traderPosition);
+  await closePosition(
+    sdkManager,
+    vaultAddress,
+    { traderAddress: tonAddress, baseAsset, direction: Direction['long'], size: AMOUNT_IN_ASSET },
+    wallet
+  );
 });
 
 async function createOrder(sdkManager: _SdkManager, vaultAddress: string, orderParams: AsyncCreateOrderParams, wallet: Wallet) {
   const transaction = await sdkManager.createOrder(vaultAddress, orderParams);
+  await sendTransaction(wallet, transaction);
+}
+
+async function closePosition(sdkManager: _SdkManager, vaultAddress: string, params: AsyncClosePositionParams, wallet: Wallet) {
+  const transaction = await sdkManager.closePosition(vaultAddress, params);
+  await sendTransaction(wallet, transaction);
+}
+
+async function sendTransaction(wallet: Wallet, transaction: TXParams) {
   const seqno = await wallet.getSeqno();
   const transfer = await wallet.createTransfer([internal(transaction)], seqno);
   const ext = beginCell()
