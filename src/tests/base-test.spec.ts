@@ -1,11 +1,12 @@
 import { setTriggerPriceCommand } from '@/commands/set-trigger-price';
 import { Config } from '@/utils/config';
 import DatabaseClient from '@/utils/db';
+import { getLastPrice } from '@/utils/oracle';
 import { _SdkManager } from '@/utils/sdk-manager';
 import { sendToSequencer } from '@/utils/sequencer';
 import { Wallet } from '@/utils/wallet';
 import { test } from '@fixtures/baseFixture';
-import { AsyncClosePositionParams, AsyncCreateOrderParams, Direction, TXParams } from '@storm-trade/sdk';
+import { AsyncCreateOrderParams, Direction, TXParams } from '@storm-trade/sdk';
 import { beginCell, external, internal, storeMessage } from '@ton/core';
 import { Client } from 'pg';
 import { expect } from 'playwright/test';
@@ -53,6 +54,30 @@ async function getOrderHistoryLoop(
     orderHistory,
     actualOrderStatuses,
     orderTypesSet,
+  };
+}
+
+/**
+ * Loops until `endTime` is reached or a trader position is found in `closedAt` status.
+ * It waits for 1 second in each iteration.
+ * It returns the last `traderPosition` and its `closedAt` timestamp.
+ * @param {DatabaseClient<Client>} db - an instance of DatabaseClient
+ * @param {string} traderRawString - raw string representation of the trader's address
+ * @param {number} [endTime=Date.now() + 10 * 60 * 1000] - a timestamp in milliseconds when the loop should stop
+ * @returns {Promise<{ traderPosition: any; closedAt: number | null }>}
+ */
+async function verifyThatPositionIsClosed(db: DatabaseClient<Client>, traderRawString: string, endTime: number = Date.now() + 5 * 60 * 1000) {
+  let traderPosition: any = {};
+  while (Date.now() < endTime) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    traderPosition = (await db.getTraderPositions(traderRawString)).find(({ status }) => status === 'closed');
+    if (traderPosition?.tx_id) {
+      break;
+    }
+  }
+  expect.soft(traderPosition?.status, 'Checking that trader position is closed').toBe('closed');
+  return {
+    traderPosition,
   };
 }
 
@@ -106,19 +131,14 @@ const ACTIVE_ORDER_STATUSES = ['seq_pending', 'active'];
     await closePosition(
       sdkManager,
       vaultAddress,
-      { traderAddress: tonAddress, baseAsset, direction: Direction['long'], size: AMOUNT_IN_ASSET },
+      { traderAddress: tonAddress, baseAsset, direction: Direction['long'], amount: traderPosition.size },
       wallet
     );
+    await verifyThatPositionIsClosed(db, tonAddressRaw);
   });
 });
 
-test(`Verify that stop market order can be created and activated via index price == stop price`, async ({
-  wallet,
-  sdkManager,
-  db,
-  tonAddress,
-  tonAddressRaw,
-}) => {
+test(`Stop market order on synthetic BNB/USDT with fake oracle price changes`, async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
   test.setTimeout(60 * 12 * 1000);
   const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
   const quoteAssetName = Config.assetIdToName(quoteAssetId);
@@ -163,49 +183,41 @@ test(`Verify that stop market order can be created and activated via index price
   await closePosition(
     sdkManager,
     vaultAddress,
-    { traderAddress: tonAddress, baseAsset, direction: Direction['long'], size: AMOUNT_IN_ASSET },
+    { traderAddress: tonAddress, baseAsset, direction: Direction['long'], amount: traderPosition.size },
     wallet
   );
+  await verifyThatPositionIsClosed(db, tonAddressRaw);
 });
 
-test(`Verify that limit market order can be created and activated`, async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
+test(`Stop market order on BTC/USDT with real oracle price`, async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
   test.setTimeout(60 * 12 * 1000);
-  const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
+  const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BTC/USDT');
   const quoteAssetName = Config.assetIdToName(quoteAssetId);
   const AMOUNT_OF_USDT = 1;
   const AMOUNT_IN_ASSET = Config.toAsset(quoteAssetName, AMOUNT_OF_USDT);
-  const STOP_TRIGGER_PRICE = 2.5;
-  const STOP_TRIGGER_PRICE_IN_ASSET = Config.toAsset(quoteAssetName, STOP_TRIGGER_PRICE);
-  const LIMIT_PRICE = 4;
-  const LIMIT_PRICE_IN_ASSET = Config.toAsset(quoteAssetName, LIMIT_PRICE);
+  const currentPrice = await getLastPrice(baseAsset);
+  const stopPrice = BigInt(Math.floor(currentPrice * 1.00001));
   const orderParams = {
     orderType: 'stopLimit' as const,
-    direction: Direction['short'],
+    direction: Direction['long'],
     leverage: BigInt(50 * 1e9),
     amount: AMOUNT_IN_ASSET,
     baseAsset,
     expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
-    stopTriggerPrice: STOP_TRIGGER_PRICE_IN_ASSET,
+    stopTriggerPrice: 0n,
     takeTriggerPrice: 0n,
-    stopPrice: 0n,
+    limitPrice: 0n,
+    stopPrice,
     traderAddress: tonAddress,
-    limitPrice: LIMIT_PRICE_IN_ASSET,
   };
-  await setTriggerPriceCommand(baseAsset, 3);
   await createOrder(sdkManager, vaultAddress, orderParams, wallet);
   const orderType = 'limit';
   let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, tonAddressRaw, ACTIVE_ORDER_STATUSES);
-  orderHistory.forEach(({ stop_trigger_price, limit_price }) => {
-    expect
-      .soft(Number(stop_trigger_price), 'Checking stop trigger price. Should be equal to the one set in initial orderParams')
-      .toEqual(Number(STOP_TRIGGER_PRICE_IN_ASSET));
-    expect
-      .soft(Number(limit_price), 'Checking limit price. Should be equal to the one set in initial orderParams')
-      .toEqual(Number(LIMIT_PRICE_IN_ASSET));
+  orderHistory.forEach(({ stop_price }) => {
+    expect.soft(Number(stop_price), 'Checking stop price. Should be equal to the one set in initial orderParams').toEqual(Number(stopPrice));
   });
   checkOrderStatuses(actualOrderStatuses, ACTIVE_ORDER_STATUSES);
   checkOrderType(orderTypesSet, orderType);
-  await setTriggerPriceCommand(baseAsset, LIMIT_PRICE);
   const {
     orderHistory: secondRecordHistory,
     actualOrderStatuses: secondActualOrderStatuses,
@@ -218,71 +230,142 @@ test(`Verify that limit market order can be created and activated`, async ({ wal
   checkOrderType(secondOrderTypesSet, orderType);
   const [traderPosition] = await db.getTraderPositions(tonAddressRaw);
   checkIndexPriceAndPositionStatus(traderPosition);
-  // check that position is closed (because of stopLoss)
-  await setTriggerPriceCommand(baseAsset, STOP_TRIGGER_PRICE);
+  await closePosition(
+    sdkManager,
+    vaultAddress,
+    { traderAddress: tonAddress, baseAsset, direction: Direction['long'], amount: traderPosition.size },
+    wallet
+  );
+  await verifyThatPositionIsClosed(db, tonAddressRaw);
 });
 
-test.skip(`Has to be debugged and configured first - Verify that stop limit market order can be created and activated`, async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
-  test.setTimeout(60 * 12 * 1000);
-  const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
-  const quoteAssetName = Config.assetIdToName(quoteAssetId);
-  const AMOUNT_OF_USDT = 1;
-  const AMOUNT_IN_ASSET = Config.toAsset(quoteAssetName, AMOUNT_OF_USDT);
-  const STOP_TRIGGER_PRICE = 2.5;
-  const STOP_TRIGGER_PRICE_IN_ASSET = Config.toAsset(quoteAssetName, STOP_TRIGGER_PRICE);
-  const LIMIT_PRICE = 4;
-  const LIMIT_PRICE_IN_ASSET = Config.toAsset(quoteAssetName, LIMIT_PRICE);
-  const orderParams = {
-    orderType: 'stopLimit' as const,
-    direction: Direction['short'],
-    leverage: BigInt(50 * 1e9),
-    amount: AMOUNT_IN_ASSET,
-    baseAsset,
-    expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
-    stopTriggerPrice: Config.toAsset(quoteAssetName, 99.5),
-    takeTriggerPrice: 0n,
-    stopPrice: 100n,
-    traderAddress: tonAddress,
-    limitPrice: Config.toAsset(quoteAssetName, 100),
-  };
-  await setTriggerPriceCommand(baseAsset, 3);
-  await createOrder(sdkManager, vaultAddress, orderParams, wallet);
-  const orderType = 'limit';
-  let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, tonAddressRaw, ACTIVE_ORDER_STATUSES);
-  orderHistory.forEach(({ stop_trigger_price, limit_price }) => {
-    expect
-      .soft(Number(stop_trigger_price), 'Checking stop trigger price. Should be equal to the one set in initial orderParams')
-      .toEqual(Number(STOP_TRIGGER_PRICE_IN_ASSET));
-    expect
-      .soft(Number(limit_price), 'Checking limit price. Should be equal to the one set in initial orderParams')
-      .toEqual(Number(LIMIT_PRICE_IN_ASSET));
-  });
-  checkOrderStatuses(actualOrderStatuses, ACTIVE_ORDER_STATUSES);
-  checkOrderType(orderTypesSet, orderType);
-  await setTriggerPriceCommand(baseAsset, LIMIT_PRICE);
-  const {
-    orderHistory: secondRecordHistory,
-    actualOrderStatuses: secondActualOrderStatuses,
-    orderTypesSet: secondOrderTypesSet,
-  } = await getOrderHistoryLoop(db, tonAddressRaw, EXECUTED_ORDER_STATUSES);
-  let executedOrderRecord = findOrderByStatus(secondRecordHistory, 'executed');
-  let activeOrderRecord = findOrderByStatus(secondRecordHistory, 'active');
-  checkOrderExecutionTime(executedOrderRecord, activeOrderRecord);
-  checkOrderStatuses(secondActualOrderStatuses, EXECUTED_ORDER_STATUSES);
-  checkOrderType(secondOrderTypesSet, orderType);
-  const [traderPosition] = await db.getTraderPositions(tonAddressRaw);
-  checkIndexPriceAndPositionStatus(traderPosition);
-  // check that position is closed (because of stopLoss)
-  await setTriggerPriceCommand(baseAsset, STOP_TRIGGER_PRICE);
-});
+test.skip(
+  `Limit market order on synthetic BNB/USDT with fake oracle price changes`,
+  { tag: '@IN-DEV' },
+  async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
+    test.setTimeout(60 * 12 * 1000);
+    const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
+    const quoteAssetName = Config.assetIdToName(quoteAssetId);
+    const AMOUNT_OF_USDT = 1;
+    const AMOUNT_IN_ASSET = Config.toAsset(quoteAssetName, AMOUNT_OF_USDT);
+    const STOP_TRIGGER_PRICE = 2.5;
+    const STOP_TRIGGER_PRICE_IN_ASSET = Config.toAsset(quoteAssetName, STOP_TRIGGER_PRICE);
+    const LIMIT_PRICE = 4;
+    const LIMIT_PRICE_IN_ASSET = Config.toAsset(quoteAssetName, LIMIT_PRICE);
+    const orderParams = {
+      orderType: 'stopLimit' as const,
+      direction: Direction['short'],
+      leverage: BigInt(50 * 1e9),
+      amount: AMOUNT_IN_ASSET,
+      baseAsset,
+      expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
+      stopTriggerPrice: STOP_TRIGGER_PRICE_IN_ASSET,
+      takeTriggerPrice: 0n,
+      stopPrice: 0n,
+      traderAddress: tonAddress,
+      limitPrice: LIMIT_PRICE_IN_ASSET,
+    };
+    await setTriggerPriceCommand(baseAsset, 3);
+    await createOrder(sdkManager, vaultAddress, orderParams, wallet);
+    const orderType = 'limit';
+    let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, tonAddressRaw, ACTIVE_ORDER_STATUSES);
+    orderHistory.forEach(({ stop_trigger_price, limit_price }) => {
+      expect
+        .soft(Number(stop_trigger_price), 'Checking stop trigger price. Should be equal to the one set in initial orderParams')
+        .toEqual(Number(STOP_TRIGGER_PRICE_IN_ASSET));
+      expect
+        .soft(Number(limit_price), 'Checking limit price. Should be equal to the one set in initial orderParams')
+        .toEqual(Number(LIMIT_PRICE_IN_ASSET));
+    });
+    checkOrderStatuses(actualOrderStatuses, ACTIVE_ORDER_STATUSES);
+    checkOrderType(orderTypesSet, orderType);
+    await setTriggerPriceCommand(baseAsset, LIMIT_PRICE);
+    const {
+      orderHistory: secondRecordHistory,
+      actualOrderStatuses: secondActualOrderStatuses,
+      orderTypesSet: secondOrderTypesSet,
+    } = await getOrderHistoryLoop(db, tonAddressRaw, EXECUTED_ORDER_STATUSES);
+    let executedOrderRecord = findOrderByStatus(secondRecordHistory, 'executed');
+    let activeOrderRecord = findOrderByStatus(secondRecordHistory, 'active');
+    checkOrderExecutionTime(executedOrderRecord, activeOrderRecord);
+    checkOrderStatuses(secondActualOrderStatuses, EXECUTED_ORDER_STATUSES);
+    checkOrderType(secondOrderTypesSet, orderType);
+    const [traderPosition] = await db.getTraderPositions(tonAddressRaw);
+    checkIndexPriceAndPositionStatus(traderPosition);
+    // check that position is closed (because of stopLoss)
+    await setTriggerPriceCommand(baseAsset, STOP_TRIGGER_PRICE);
+    await verifyThatPositionIsClosed(db, tonAddressRaw);
+  }
+);
+
+test.skip(
+  `Verify that stop limit market order can be created and activated`,
+  { tag: '@IN-DEV' },
+  async ({ wallet, sdkManager, db, tonAddress, tonAddressRaw }) => {
+    test.setTimeout(60 * 12 * 1000);
+    const { vaultAddress, quoteAssetId, baseAsset } = Config.getMarket('BNB/USDT');
+    const quoteAssetName = Config.assetIdToName(quoteAssetId);
+    const AMOUNT_OF_USDT = 1;
+    const AMOUNT_IN_ASSET = Config.toAsset(quoteAssetName, AMOUNT_OF_USDT);
+    const STOP_TRIGGER_PRICE = 2.5;
+    const STOP_TRIGGER_PRICE_IN_ASSET = Config.toAsset(quoteAssetName, STOP_TRIGGER_PRICE);
+    const LIMIT_PRICE = 4;
+    const LIMIT_PRICE_IN_ASSET = Config.toAsset(quoteAssetName, LIMIT_PRICE);
+    const orderParams = {
+      orderType: 'stopLimit' as const,
+      direction: Direction['short'],
+      leverage: BigInt(50 * 1e9),
+      amount: AMOUNT_IN_ASSET,
+      baseAsset,
+      expiration: Math.ceil((Date.now() + 24 * 60 * 60 * 1000) / 1000),
+      stopTriggerPrice: Config.toAsset(quoteAssetName, 99.5),
+      takeTriggerPrice: 0n,
+      stopPrice: 100n,
+      traderAddress: tonAddress,
+      limitPrice: Config.toAsset(quoteAssetName, 100),
+    };
+    await setTriggerPriceCommand(baseAsset, 3);
+    await createOrder(sdkManager, vaultAddress, orderParams, wallet);
+    const orderType = 'limit';
+    let { orderHistory, actualOrderStatuses, orderTypesSet } = await getOrderHistoryLoop(db, tonAddressRaw, ACTIVE_ORDER_STATUSES);
+    orderHistory.forEach(({ stop_trigger_price, limit_price }) => {
+      expect
+        .soft(Number(stop_trigger_price), 'Checking stop trigger price. Should be equal to the one set in initial orderParams')
+        .toEqual(Number(STOP_TRIGGER_PRICE_IN_ASSET));
+      expect
+        .soft(Number(limit_price), 'Checking limit price. Should be equal to the one set in initial orderParams')
+        .toEqual(Number(LIMIT_PRICE_IN_ASSET));
+    });
+    checkOrderStatuses(actualOrderStatuses, ACTIVE_ORDER_STATUSES);
+    checkOrderType(orderTypesSet, orderType);
+    await setTriggerPriceCommand(baseAsset, LIMIT_PRICE);
+    const {
+      orderHistory: secondRecordHistory,
+      actualOrderStatuses: secondActualOrderStatuses,
+      orderTypesSet: secondOrderTypesSet,
+    } = await getOrderHistoryLoop(db, tonAddressRaw, EXECUTED_ORDER_STATUSES);
+    let executedOrderRecord = findOrderByStatus(secondRecordHistory, 'executed');
+    let activeOrderRecord = findOrderByStatus(secondRecordHistory, 'active');
+    checkOrderExecutionTime(executedOrderRecord, activeOrderRecord);
+    checkOrderStatuses(secondActualOrderStatuses, EXECUTED_ORDER_STATUSES);
+    checkOrderType(secondOrderTypesSet, orderType);
+    const [traderPosition] = await db.getTraderPositions(tonAddressRaw);
+    checkIndexPriceAndPositionStatus(traderPosition);
+    // check that position is closed (because of stopLoss)
+    await setTriggerPriceCommand(baseAsset, STOP_TRIGGER_PRICE);
+    await verifyThatPositionIsClosed(db, tonAddressRaw);
+  }
+);
 
 async function createOrder(sdkManager: _SdkManager, vaultAddress: string, orderParams: AsyncCreateOrderParams, wallet: Wallet) {
   const transaction = await sdkManager.createOrder(vaultAddress, orderParams);
   await sendTransaction(wallet, transaction);
 }
 
+type AsyncClosePositionParams = Omit<AsyncCreateOrderParams, 'orderType' | 'expiration'>;
+
 async function closePosition(sdkManager: _SdkManager, vaultAddress: string, params: AsyncClosePositionParams, wallet: Wallet) {
-  const transaction = await sdkManager.closePosition(vaultAddress, params);
+  const transaction = await sdkManager.createOrder(vaultAddress, { ...params, orderType: 'takeProfit', trigerPrice: 0n, expiration: 0 });
   await sendTransaction(wallet, transaction);
 }
 
